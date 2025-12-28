@@ -1,0 +1,41 @@
+# Composer
+/vendor/
+composer.lock
+
+# PHPUnit
+/coverage/
+.phpunit.result.cache
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+*.phar
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Test artifacts
+/test-results/
+/phpunit.xml.bak
+
