@@ -4,6 +4,8 @@ This module integrates WHMCS with GameCP to automatically provision game servers
 
 ## Features
 
+- **Single Sign-On (SSO)**: Automatic login to the GameCP panel from WHMCS using JWT tokens
+- **Live Metrics**: Real-time CPU, Memory, and Player status directly in the WHMCS Client Area
 - **Automatic Server Provisioning**: Creates game servers with automatic port assignment when orders are paid
 - **User Management**: Automatically creates GameCP users with bcrypt-hashed passwords
 - **Server Management**: Full lifecycle support - suspend, unsuspend, and terminate operations
@@ -14,15 +16,20 @@ This module integrates WHMCS with GameCP to automatically provision game servers
 
 ## Installation
 
-1. Upload the `gamecp.php` file to your WHMCS installation:
+1. **Download the Module**: Download the latest release as a ZIP file from the [GitHub repository](https://github.com/GameCP/gamecp-whmcs-module).
+
+2. **Extract and Upload**: Extract the ZIP file and upload the contents of the `gamecp-whmcs-module` folder to your WHMCS installations server directory:
    ```
-   /path/to/whmcs/modules/servers/gamecp/gamecp.php
+   /path/to/whmcs/modules/servers/gamecp/
    ```
 
-2. Create the directory if it doesn't exist:
-   ```bash
-   mkdir -p /path/to/whmcs/modules/servers/gamecp
-   ```
+3. **Ensure All Files Are Present**: The following files should be present in the directory:
+   - `gamecp.php`: Core module logic
+   - `clientarea.tpl`: Client area management interface
+   - `admin_hook.php`: Admin area hooks and customizations
+   - `README.md`: This documentation
+
+4. **Set Permissions**: Ensure the directory and files are readable by your web server (usually `www-data` or `apache`).
 
 ## Configuration
 
