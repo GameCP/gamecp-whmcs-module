@@ -30,6 +30,14 @@ function gamecp_MetaData()
         'AdminSingleSignOnLabel' => 'Login to Admin Panel',
         'ListAccountsUniqueIdentifierField' => 'domain',
         'ListAccountsUniqueIdentifierDisplayName' => 'Server Name',
+        // Module branding & info
+        'Description' => 'Automated game server provisioning and management. Instantly deploy, control, and monitor game servers for your customers with full SSO integration.',
+        'Author' => 'GameCP',
+        'AuthorURL' => 'https://gamecp.com',
+        'Version' => '1.1.0',
+        'Category' => 'Game Servers',
+        'SupportURL' => 'https://gamecp.com/support',
+        'DocumentationURL' => 'https://docs.gamecp.com/whmcs',
     );
 }
 
@@ -71,13 +79,13 @@ function gamecp_TestConnection(array $params)
     try {
         $apiUrl = $params['serverhostname'] ?: $params['serverip'];
         $apiKey = $params['serveraccesshash'];
-        
+
         // Ensure URL has protocol - default to HTTPS
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
             // Use HTTPS by default, or HTTP if explicitly not secure
             $apiUrl = "https://" . $apiUrl;
         }
-        
+
         // Validate required fields
         if (empty($apiUrl)) {
             return array(
@@ -85,19 +93,19 @@ function gamecp_TestConnection(array $params)
                 'error' => 'Hostname or IP Address is required',
             );
         }
-        
+
         if (empty($apiKey)) {
             return array(
                 'success' => false,
                 'error' => 'API Key (Access Hash) is required',
             );
         }
-        
+
         // Tenant Slug validation removed - using hostname context
-        
+
         // Try to fetch users list as a connection test
         $testUrl = rtrim($apiUrl, '/') . '/api/users?limit=1';
-        
+
         // Manual curl for better error reporting
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $testUrl);
@@ -109,14 +117,14 @@ function gamecp_TestConnection(array $params)
             'Content-Type: application/json',
             'Authorization: Bearer ' . $apiKey
         ));
-        
+
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
         $effectiveUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL); // Where did we end up?
         $redirectCount = curl_getinfo($ch, CURLINFO_REDIRECT_COUNT);
         curl_close($ch);
-        
+
         // Log the attempt
         logModuleCall(
             'gamecp',
@@ -135,44 +143,44 @@ function gamecp_TestConnection(array $params)
             ),
             array()
         );
-        
+
         if ($curlError) {
             return array(
                 'success' => false,
                 'error' => 'Connection error: ' . $curlError,
             );
         }
-        
+
         if ($httpCode === 0) {
             return array(
                 'success' => false,
                 'error' => 'Could not connect to ' . $apiUrl . '. Please check the hostname is correct and accessible.',
             );
         }
-        
+
         if ($httpCode === 401) {
             return array(
                 'success' => false,
                 'error' => 'Authentication failed. Please check your API Key (Access Hash).',
             );
         }
-        
+
         if ($httpCode === 404) {
             return array(
                 'success' => false,
                 'error' => 'API endpoint not found. Please verify your Tenant Slug is correct.',
             );
         }
-        
+
         if ($httpCode < 200 || $httpCode >= 300) {
             return array(
                 'success' => false,
                 'error' => 'API returned HTTP ' . $httpCode . '. Check Module Log for details.',
             );
         }
-        
+
         $data = json_decode($response, true);
-        
+
         if (!$data) {
             $preview = substr($response, 0, 200);
             return array(
@@ -180,7 +188,7 @@ function gamecp_TestConnection(array $params)
                 'error' => 'Received invalid JSON. Response preview: ' . $preview,
             );
         }
-        
+
         // Check if response has expected structure
         // GameCP might return different structures, let's be flexible
         if (!isset($data['users']) && !isset($data['data'])) {
@@ -191,12 +199,12 @@ function gamecp_TestConnection(array $params)
                 'error' => 'Got keys: [' . $keys . ']. Preview: ' . $preview,
             );
         }
-        
+
         return array(
             'success' => true,
             'error' => '', // WHMCS expects this even on success
         );
-        
+
     } catch (Exception $e) {
         logModuleCall(
             'gamecp',
@@ -206,7 +214,7 @@ function gamecp_TestConnection(array $params)
             $e->getTraceAsString(),
             array()
         );
-        
+
         return array(
             'success' => false,
             'error' => 'Connection test failed: ' . $e->getMessage(),
@@ -227,7 +235,7 @@ function gamecp_CreateAccount(array $params)
         // API details from Server configuration
         $apiUrl = $params['serverhostname'] ?: $params['serverip'];
         $apiKey = $params['serveraccesshash']; // Using Access Hash for the API Key
-        
+
         // Debug: Log what we received
         logModuleCall(
             'gamecp',
@@ -237,7 +245,7 @@ function gamecp_CreateAccount(array $params)
             array(),
             array()
         );
-        
+
         // WHMCS Server Group workaround: fetch server details from database
         logModuleCall('gamecp', 'ServerLookup_Start', array(
             'apiKey_before' => $apiKey ?: 'EMPTY',
@@ -245,30 +253,30 @@ function gamecp_CreateAccount(array $params)
             'pid' => $params['pid'] ?? 'NOT SET',
             'will_lookup' => (empty($apiKey)) ? 'YES' : 'NO'
         ), '', array(), array());
-        
+
         if (empty($apiKey)) {
             try {
                 $serverData = null;
-                
+
                 // Try direct serverid first
                 if (!empty($params['serverid']) && $params['serverid'] > 0) {
                     $serverData = \WHMCS\Database\Capsule::table('tblservers')
                         ->where('id', $params['serverid'])
                         ->first();
                 }
-                
+
                 // If no server, try to get from product's server group
                 if (!$serverData && !empty($params['pid'])) {
                     // Get the product's server group
                     $product = \WHMCS\Database\Capsule::table('tblproducts')
                         ->where('id', $params['pid'])
                         ->first();
-                    
+
                     logModuleCall('gamecp', 'ServerLookup_Product', array(
                         'pid' => $params['pid'],
                         'servergroup' => $product->servergroup ?? 'N/A',
                     ), '', array(), array());
-                    
+
                     if ($product && $product->servergroup) {
                         // Get first GameCP server from this group
                         $serverData = \WHMCS\Database\Capsule::table('tblservers')
@@ -278,13 +286,13 @@ function gamecp_CreateAccount(array $params)
                             ->first();
                     }
                 }
-                
+
                 logModuleCall('gamecp', 'ServerLookup_Result', array(
                     'found' => $serverData ? 'YES' : 'NO',
                     'hostname' => $serverData->hostname ?? 'N/A',
                     'has_accesshash' => !empty($serverData->accesshash) ? 'YES' : 'NO',
                 ), '', array(), array());
-                
+
                 if ($serverData) {
                     $apiUrl = $serverData->hostname ?: $serverData->ipaddress;
                     $apiKey = $serverData->accesshash;
@@ -293,12 +301,12 @@ function gamecp_CreateAccount(array $params)
                 logModuleCall('gamecp', 'ServerLookup_Error', array(), $e->getMessage(), array(), array());
             }
         }
-        
+
         logModuleCall('gamecp', 'ServerLookup_Final', array(
             'apiUrl' => $apiUrl ?: 'EMPTY',
             'apiKey' => $apiKey ? 'SET (' . strlen($apiKey) . ' chars)' : 'EMPTY',
         ), '', array(), array());
-        
+
         // Ensure URL has protocol
         // Ensure URL has protocol
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
@@ -312,19 +320,28 @@ function gamecp_CreateAccount(array $params)
         $gameConfigId = trim($params['configoption1']); // Game Config ID
         $nodeId = trim($params['configoption2']); // Node ID
         $location = trim($params['configoption3']); // Location
-        
+
         // Extract domain info from WHMCS
         $domain = $params['domain'];
-        
+
         // Get client information
         $clientId = $params['clientsdetails']['userid'];
         $clientEmail = $params['clientsdetails']['email'];
         $clientFirstName = $params['clientsdetails']['firstname'];
         $clientLastName = $params['clientsdetails']['lastname'];
-        
-        // Generate server name based on domain or use a default
-        $serverName = !empty($domain) ? $domain : "server-{$clientId}-" . time();
-        
+
+        // Get WHMCS service/order ID for friendly naming
+        $serviceId = $params['serviceid'] ?? '';
+
+        // Generate server name with priority:
+        // 1. WHMCS domain field (if set by product config)
+        // 2. Friendly auto-generated name using WHMCS order ID
+        if (!empty($domain)) {
+            $serverName = $domain;
+        } else {
+            $serverName = "Game Server #" . ($serviceId ?: $clientId);
+        }
+
         // Log module activation
         logModuleCall(
             'gamecp',
@@ -334,20 +351,20 @@ function gamecp_CreateAccount(array $params)
             array(),
             array()
         );
-        
+
         // Step 1: Ensure user exists in GameCP
         // Use the password generated by WHMCS for this service (visible in admin area)
         // Note: usage of 'password' param requires it to be unhashed in module settings or standard provision
         $servicePassword = $params['password'];
-        
+
         $userId = gamecp_EnsureUserExists($apiUrl, $apiKey, array(
             'email' => $clientEmail,
             'firstName' => $clientFirstName,
             'lastName' => $clientLastName,
             'role' => 'user',
-            'password' => $servicePassword 
+            'password' => $servicePassword
         ));
-        
+
         // Update the Service Username in WHMCS to match the Email (Standardize display)
         try {
             \WHMCS\Database\Capsule::table('tblhosting')
@@ -356,11 +373,11 @@ function gamecp_CreateAccount(array $params)
         } catch (Exception $e) {
             // Ignore DB update errors, strictly cosmetic
         }
-        
+
         if (!$userId) {
             return 'error: Could not find or create user in GameCP';
         }
-        
+
         // Step 2: Get game config if not provided
         if (empty($gameConfigId)) {
             // Try to get from custom fields
@@ -369,33 +386,48 @@ function gamecp_CreateAccount(array $params)
                 return 'error: Game Config ID is required but not set';
             }
         }
-        
+
         // Step 3: Create game server
+        $configOverrides = gamecp_ParseConfigOverrides($params);
+
+        // Debug log the configOverrides being sent
+        logModuleCall(
+            'gamecp',
+            'CreateAccount_ConfigOverrides',
+            array(
+                'configoptions_raw' => $params['configoptions'] ?? [],
+                'customfields_raw' => $params['customfields'] ?? [],
+            ),
+            'Sending configOverrides: ' . json_encode($configOverrides),
+            array(),
+            array()
+        );
+
         $serverData = array(
             'name' => $serverName,
             'gameId' => $gameConfigId,
             'ownerId' => $userId,
             'startAfterInstall' => true,
-            'configOverrides' => gamecp_ParseConfigOverrides($params),
+            'configOverrides' => $configOverrides,
             'assignmentType' => 'automatic' // Always use automatic port assignment
         );
-        
+
         // Include nodeId if set (forces deployment to specific node)
         if (!empty($nodeId)) {
             $serverData['nodeId'] = $nodeId;
         }
-        
+
         // Include location if set
         if (!empty($location)) {
             $serverData['location'] = $location;
         }
-        
+
         $serverId = gamecp_CreateGameServer($apiUrl, $apiKey, $serverData);
-        
+
         if (!$serverId) {
             return 'error: Failed to create game server';
         }
-        
+
         // Step 4: Store GameCP server ID in WHMCS service
         // Use dedicatedip field for reliable storage (always exists)
         try {
@@ -405,7 +437,7 @@ function gamecp_CreateAccount(array $params)
                     'dedicatedip' => $serverId,
                     'domain' => $serverName
                 ]);
-            
+
             logModuleCall('gamecp', 'SaveServerId', array(
                 'serviceid' => $params['serviceid'],
                 'serverId' => $serverId
@@ -415,9 +447,9 @@ function gamecp_CreateAccount(array $params)
                 'serviceid' => $params['serviceid']
             ), $e->getMessage(), array(), array());
         }
-        
+
         return 'success';
-        
+
     } catch (Exception $e) {
         logModuleCall(
             'gamecp',
@@ -427,7 +459,7 @@ function gamecp_CreateAccount(array $params)
             $e->getTraceAsString(),
             array()
         );
-        
+
         return 'error: ' . $e->getMessage();
     }
 }
@@ -455,7 +487,7 @@ function gamecp_SuspendAccount(array $params)
                 $apiKey = $serverData->accesshash;
             }
         }
-        
+
         // Fallback to product's server group
         if (empty($apiKey) && !empty($params['pid'])) {
             $product = \WHMCS\Database\Capsule::table('tblproducts')
@@ -473,30 +505,30 @@ function gamecp_SuspendAccount(array $params)
                 }
             }
         }
-        
+
         // Ensure URL has protocol
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
             $apiUrl = "https://" . $apiUrl;
         }
-        
+
         // Get server ID from dedicatedip field
         $serverId = $params['model']->dedicatedip ?? $params['customfields']['GameCP Server ID'] ?? '';
-        
+
         if (empty($serverId)) {
             return 'error: GameCP Server ID not found';
         }
-        
+
         // Call GameCP API to stop the server
         $response = gamecp_ApiCall($apiUrl, $apiKey, "game-servers/{$serverId}/control", 'POST', array(
             'action' => 'stop'
         ));
-        
+
         if ($response && isset($response['success'])) {
             return 'success';
         }
-        
+
         return 'error: Failed to suspend server';
-        
+
     } catch (Exception $e) {
         return 'error: ' . $e->getMessage();
     }
@@ -536,26 +568,26 @@ function gamecp_UnsuspendAccount(array $params)
                 }
             }
         }
-        
+
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
             $apiUrl = "https://" . $apiUrl;
         }
-        
+
         $serverId = $params['model']->dedicatedip ?? $params['customfields']['GameCP Server ID'] ?? '';
-        
+
         if (empty($serverId)) {
             return 'error: GameCP Server ID not found';
         }
-        
+
         // Call GameCP API to start the server
         $response = gamecp_ApiCall($apiUrl, $apiKey, "game-servers/{$serverId}/control", 'POST', array('action' => 'start'));
-        
+
         if ($response && isset($response['success'])) {
             return 'success';
         }
-        
+
         return 'error: Failed to unsuspend server';
-        
+
     } catch (Exception $e) {
         return 'error: ' . $e->getMessage();
     }
@@ -595,26 +627,26 @@ function gamecp_TerminateAccount(array $params)
                 }
             }
         }
-        
+
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
             $apiUrl = "https://" . $apiUrl;
         }
-        
+
         $serverId = $params['model']->dedicatedip ?? $params['customfields']['GameCP Server ID'] ?? '';
-        
+
         if (empty($serverId)) {
             return 'error: GameCP Server ID not found';
         }
-        
+
         // Call GameCP API to delete the server
         $response = gamecp_ApiCall($apiUrl, $apiKey, "game-servers/{$serverId}", 'DELETE');
-        
+
         if ($response && isset($response['success'])) {
             return 'success';
         }
-        
+
         return 'error: Failed to terminate server';
-        
+
     } catch (Exception $e) {
         return 'error: ' . $e->getMessage();
     }
@@ -632,7 +664,7 @@ function gamecp_ClientArea(array $params)
     try {
         $apiUrl = $params['serverhostname'] ?: $params['serverip'];
         $apiKey = $params['serveraccesshash'];
-        
+
         // Robust credential lookup for server groups
         if (empty($apiKey) && !empty($params['serverid'])) {
             $serverData = \WHMCS\Database\Capsule::table('tblservers')
@@ -643,7 +675,7 @@ function gamecp_ClientArea(array $params)
                 $apiKey = $serverData->accesshash;
             }
         }
-        
+
         if (empty($apiKey) && !empty($params['pid'])) {
             $product = \WHMCS\Database\Capsule::table('tblproducts')
                 ->where('id', $params['pid'])
@@ -660,12 +692,12 @@ function gamecp_ClientArea(array $params)
                 }
             }
         }
-        
+
         // Ensure URL has protocol
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
             $apiUrl = "https://" . $apiUrl;
         }
-        
+
         $serverId = $params['model']->dedicatedip ?? $params['customfields']['GameCP Server ID'] ?? '';
         $serverName = $params['customfields']['GameCP Server Name'] ?? 'Game Server';
         $serviceId = $params['serviceid'];
@@ -679,7 +711,7 @@ function gamecp_ClientArea(array $params)
                 exit;
             }
         }
-        
+
         if (empty($serverId)) {
             return array(
                 'templatefile' => 'clientarea',
@@ -690,13 +722,13 @@ function gamecp_ClientArea(array $params)
                 )
             );
         }
-        
+
         // Fetch server details and metrics from API
         $response = gamecp_ApiCall($apiUrl, $apiKey, "game-servers/{$serverId}", 'GET');
-        
+
         // Handle API wrapper "gameServer" or direct response
         $server = $response['gameServer'] ?? $response;
-        
+
         if (!$server || (isset($response['error']) && $response['error'])) {
             return array(
                 'templatefile' => 'clientarea',
@@ -708,7 +740,7 @@ function gamecp_ClientArea(array $params)
                 )
             );
         }
-        
+
         return array(
             'templatefile' => 'clientarea',
             'vars' => array(
@@ -721,7 +753,7 @@ function gamecp_ClientArea(array $params)
                 'message' => $message
             )
         );
-        
+
     } catch (Exception $e) {
         return array(
             'templatefile' => 'clientarea',
@@ -750,7 +782,7 @@ function gamecp_ApiCall($apiUrl, $apiKey, $endpoint, $method = 'GET', $data = nu
 {
     // Use /api/ - middleware now supports API key auth
     $url = rtrim($apiUrl, '/') . '/api/' . ltrim($endpoint, '/');
-    
+
     // Check for test mocks (simple global variable approach)
     if (defined('GAMECP_TEST_MODE') && GAMECP_TEST_MODE === true) {
         if (isset($GLOBALS['_GAMECP_API_MOCKS'])) {
@@ -783,9 +815,9 @@ function gamecp_ApiCall($apiUrl, $apiKey, $endpoint, $method = 'GET', $data = nu
         );
         return false;
     }
-    
+
     $ch = curl_init();
-    
+
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true); // Follow redirects
@@ -795,19 +827,19 @@ function gamecp_ApiCall($apiUrl, $apiKey, $endpoint, $method = 'GET', $data = nu
     $timeout = (defined('GAMECP_TEST_MODE') && GAMECP_TEST_MODE === true) ? 1 : 30;
     curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout);
-    
+
     $headers = array(
         'Content-Type: application/json',
         'Authorization: Bearer ' . $apiKey
     );
-    
+
     if ($data !== null) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         $headers[] = 'Content-Length: ' . strlen(json_encode($data));
     }
-    
+
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    
+
     // Build curl command for debugging
     $curlCmd = "curl -X {$method} '{$url}'";
     foreach ($headers as $header) {
@@ -816,7 +848,7 @@ function gamecp_ApiCall($apiUrl, $apiKey, $endpoint, $method = 'GET', $data = nu
     if ($data !== null) {
         $curlCmd .= " -d '" . json_encode($data) . "'";
     }
-    
+
     // Log the curl command for easy testing
     logModuleCall(
         'gamecp',
@@ -826,13 +858,13 @@ function gamecp_ApiCall($apiUrl, $apiKey, $endpoint, $method = 'GET', $data = nu
         array(),
         array()
     );
-    
+
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
-    
+
     curl_close($ch);
-    
+
     if ($error) {
         logModuleCall(
             'gamecp',
@@ -844,11 +876,11 @@ function gamecp_ApiCall($apiUrl, $apiKey, $endpoint, $method = 'GET', $data = nu
         );
         return false;
     }
-    
+
     if ($httpCode >= 200 && $httpCode < 300) {
         return json_decode($response, true);
     }
-    
+
     logModuleCall(
         'gamecp',
         'ApiCall',
@@ -857,7 +889,7 @@ function gamecp_ApiCall($apiUrl, $apiKey, $endpoint, $method = 'GET', $data = nu
         array(),
         array()
     );
-    
+
     return false;
 }
 
@@ -875,18 +907,18 @@ function gamecp_EnsureUserExists($apiUrl, $apiKey, $userData)
 {
     // Try to find existing user
     $user = gamecp_FindUserByEmail($apiUrl, $apiKey, $userData['email']);
-    
+
     if ($user) {
         return $user['_id'];
     }
-    
+
     // Create new user
     $response = gamecp_ApiCall($apiUrl, $apiKey, 'settings/users', 'POST', $userData);
-    
+
     if ($response && isset($response['_id'])) {
         return $response['_id'];
     }
-    
+
     return null;
 }
 
@@ -903,11 +935,11 @@ function gamecp_EnsureUserExists($apiUrl, $apiKey, $userData)
 function gamecp_FindUserByEmail($apiUrl, $apiKey, $email)
 {
     $response = gamecp_ApiCall($apiUrl, $apiKey, "users?email=" . urlencode($email), 'GET');
-    
+
     if ($response && isset($response['data']['users']) && count($response['data']['users']) > 0) {
         return $response['data']['users'][0];
     }
-    
+
     return null;
 }
 
@@ -925,40 +957,97 @@ function gamecp_CreateGameServer($apiUrl, $apiKey, $serverData)
 {
     // Tenant context is handled by headers/domain
     $response = gamecp_ApiCall($apiUrl, $apiKey, 'game-servers', 'POST', $serverData);
-    
+
     // Response format: {"success":true,"gameServer":{"_id":"...","serverId":"minecraft-xxx",...}}
     // Return serverId (used for API calls) not _id
     if ($response && isset($response['gameServer']['serverId'])) {
         return $response['gameServer']['serverId'];
     }
-    
+
     // Fallback for direct response
     if ($response && isset($response['serverId'])) {
         return $response['serverId'];
     }
-    
+
     return null;
 }
 
 /**
  * Parse configuration overrides from WHMCS params.
+ * 
+ * Collects values from:
+ * - Custom Fields (by field name)
+ * - Configurable Options (by option name)
+ * 
+ * GameCP will match these by environment variable LABEL, so admins can use
+ * friendly names like "Server Name" which maps to the env var with that label.
  *
  * @param array $params WHMCS parameters
  *
- * @return array Configuration overrides
+ * @return array Configuration overrides keyed by label
  */
 function gamecp_ParseConfigOverrides($params)
 {
     $overrides = array();
-    
-    // Parse custom fields that start with 'config_'
-    foreach ($params['customfields'] as $key => $value) {
-        if (strpos($key, 'config_') === 0) {
-            $configKey = substr($key, 7); // Remove 'config_' prefix
-            $overrides[$configKey] = $value;
+
+    // Reserved field names that are NOT config overrides
+    $reserved = array(
+        'Game Config ID',
+        'GameCP Server ID',
+        'GameCP Server Name',
+        'Node ID',
+        'Location',
+    );
+
+    // 1. Parse ALL custom fields (except reserved ones)
+    if (!empty($params['customfields']) && is_array($params['customfields'])) {
+        foreach ($params['customfields'] as $key => $value) {
+            // Skip reserved fields and empty values
+            if (in_array($key, $reserved) || $value === '' || $value === null) {
+                continue;
+            }
+
+            // Legacy support: strip 'config_' prefix if present
+            if (strpos($key, 'config_') === 0) {
+                $key = substr($key, 7);
+            }
+
+            $overrides[$key] = $value;
         }
     }
-    
+
+    // 2. Parse ALL Configurable Options
+    if (!empty($params['configoptions']) && is_array($params['configoptions'])) {
+        foreach ($params['configoptions'] as $key => $value) {
+            // Skip empty values
+            if ($value === '' || $value === null) {
+                continue;
+            }
+
+            // Legacy support: strip 'config_' prefix if present
+            if (strpos($key, 'config_') === 0) {
+                $key = substr($key, 7);
+            }
+
+            $overrides[$key] = $value;
+        }
+    }
+
+    // Log what we're passing for debugging
+    if (!empty($overrides)) {
+        logModuleCall(
+            'gamecp',
+            'ParseConfigOverrides',
+            array(
+                'customfields_count' => count($params['customfields'] ?? []),
+                'configoptions_count' => count($params['configoptions'] ?? []),
+            ),
+            'Passing ' . count($overrides) . ' overrides: ' . json_encode(array_keys($overrides)),
+            array(),
+            array()
+        );
+    }
+
     return $overrides;
 }
 
@@ -975,30 +1064,30 @@ function gamecp_InstallGameServer(array $params)
         $apiUrl = $params['serverhostname'] ?: $params['serverip'];
         $apiKey = $params['serveraccesshash'];
 
-        
+
         // Ensure URL has protocol
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
             $apiUrl = "https://" . $apiUrl;
         }
-        
+
         $serverId = $params['customfields']['GameCP Server ID'];
-        
+
         if (empty($serverId)) {
             return 'error: GameCP Server ID not found';
         }
-        
+
         // Get server details to check if it needs installation
         $server = gamecp_ApiCall($apiUrl, $apiKey, "game-servers/{$serverId}", 'GET');
-        
+
         if (!$server) {
             return 'error: Game server not found';
         }
-        
+
         // Check if server is already installed or installing
         if (in_array($server['status'] ?? '', ['installing', 'running', 'stopped'])) {
             return 'error: Game server is already installed or installing';
         }
-        
+
         // Get the actual server _id if serverId is not an ObjectId
         $actualServerId = $serverId;
         if (!preg_match('/^[0-9a-fA-F]{24}$/', $serverId)) {
@@ -1008,18 +1097,18 @@ function gamecp_InstallGameServer(array $params)
                 $actualServerId = $servers['servers'][0]['_id'] ?? $serverId;
             }
         }
-        
+
         // Deploy/install the game server
         // Deploy/install the game server
         $response = gamecp_ApiCall($apiUrl, $apiKey, "game-servers/{$actualServerId}/deploy", 'POST');
-        
+
         if ($response && (isset($response['success']) || isset($response['message']))) {
             return 'success';
         }
-        
+
         $errorMsg = isset($response['error']) ? $response['error'] : 'Unknown error';
         return 'error: Failed to install game server: ' . $errorMsg;
-        
+
     } catch (Exception $e) {
         logModuleCall(
             'gamecp',
@@ -1029,7 +1118,7 @@ function gamecp_InstallGameServer(array $params)
             $e->getTraceAsString(),
             array()
         );
-        
+
         return 'error: ' . $e->getMessage();
     }
 }
@@ -1049,21 +1138,21 @@ function gamecp_UninstallGameServer(array $params)
         $apiUrl = $params['serverhostname'] ?: $params['serverip'];
         $apiKey = $params['serveraccesshash'];
 
-        
+
         // Ensure URL has protocol
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
             $apiUrl = "https://" . $apiUrl;
         }
-        
+
         $serverId = $params['customfields']['GameCP Server ID'];
-        
+
         if (empty($serverId)) {
             return 'error: GameCP Server ID not found';
         }
-        
+
         // Get server details first to verify it exists
         $server = gamecp_ApiCall($apiUrl, $apiKey, "game-servers/{$serverId}", 'GET');
-        
+
         // If not found by _id, try searching by serverId
         if (!$server || (isset($server['error']) && $server['error'])) {
             $servers = gamecp_ApiCall($apiUrl, $apiKey, "game-servers?serverId=" . urlencode($serverId), 'GET');
@@ -1075,7 +1164,7 @@ function gamecp_UninstallGameServer(array $params)
                 return 'error: Game server not found';
             }
         }
-        
+
         // Stop the server first if it's running
         // Use the actual server _id for the control endpoint
         $controlServerId = isset($server['_id']) ? $server['_id'] : $serverId;
@@ -1086,26 +1175,26 @@ function gamecp_UninstallGameServer(array $params)
             // Wait a moment for the server to stop
             sleep(2);
         }
-        
+
         // Use the _id for deletion if we have it
         $deleteServerId = isset($server['_id']) ? $server['_id'] : $serverId;
-        
+
         // Delete the game server (this removes the server and all game files)
         // The API will handle cleanup on the node server
         // Delete the game server (this removes the server and all game files)
         // The API will handle cleanup on the node server
         $response = gamecp_ApiCall($apiUrl, $apiKey, "game-servers/{$deleteServerId}", 'DELETE');
-        
+
         if ($response && (isset($response['success']) || isset($response['message']) || !isset($response['error']))) {
             // Clear the custom fields since server is deleted
             gamecp_SaveCustomField($params['serviceid'], 'GameCP Server ID', '');
             gamecp_SaveCustomField($params['serviceid'], 'GameCP Server Name', '');
             return 'success';
         }
-        
+
         $errorMsg = isset($response['error']) ? $response['error'] : 'Unknown error';
         return 'error: Failed to uninstall game server: ' . $errorMsg;
-        
+
     } catch (Exception $e) {
         logModuleCall(
             'gamecp',
@@ -1115,7 +1204,7 @@ function gamecp_UninstallGameServer(array $params)
             $e->getTraceAsString(),
             array()
         );
-        
+
         return 'error: ' . $e->getMessage();
     }
 }
@@ -1133,7 +1222,7 @@ function gamecp_ServiceSingleSignOn(array $params)
     try {
         $apiUrl = $params['serverhostname'] ?: $params['serverip'];
         $apiKey = $params['serveraccesshash'];
-        
+
         // WHMCS Server Group workaround: fetch server details from database
         if (empty($apiKey) && !empty($params['serverid'])) {
             $serverData = \WHMCS\Database\Capsule::table('tblservers')
@@ -1144,7 +1233,7 @@ function gamecp_ServiceSingleSignOn(array $params)
                 $apiKey = $serverData->accesshash;
             }
         }
-        
+
         // Fallback to product's server group
         if (empty($apiKey) && !empty($params['pid'])) {
             $product = \WHMCS\Database\Capsule::table('tblproducts')
@@ -1162,39 +1251,39 @@ function gamecp_ServiceSingleSignOn(array $params)
                 }
             }
         }
-        
+
         // Ensure URL has protocol
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
             $apiUrl = "https://" . $apiUrl;
         }
-        
+
         // Get server ID from dedicatedip field
         $serverId = $params['model']->dedicatedip ?? $params['customfields']['GameCP Server ID'] ?? '';
         $clientEmail = $params['clientsdetails']['email'];
-        
+
         // Determine redirect path
         $redirectPath = !empty($serverId) ? '/game-servers/' . $serverId : '/';
-        
+
         // Call GameCP SSO token API
         $ssoResponse = gamecp_ApiCall($apiUrl, $apiKey, 'auth/sso-token', 'POST', array(
             'email' => $clientEmail,
             'redirectTo' => $redirectPath,
             'baseUrl' => rtrim($apiUrl, '/') // Send the public URL
         ));
-        
+
         if ($ssoResponse && isset($ssoResponse['ssoUrl'])) {
             return array(
                 'success' => true,
                 'redirectTo' => $ssoResponse['ssoUrl'],
             );
         }
-        
+
         // Fallback: redirect to main panel without auto-login
         return array(
             'success' => true,
             'redirectTo' => rtrim($apiUrl, '/'),
         );
-        
+
     } catch (Exception $e) {
         logModuleCall(
             'gamecp',
@@ -1204,15 +1293,15 @@ function gamecp_ServiceSingleSignOn(array $params)
             $e->getTraceAsString(),
             array()
         );
-        
+
         // Return base URL on error
         $apiUrl = $params['serverhostname'] ?: $params['serverip'];
-        
+
         // Ensure URL has protocol
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
             $apiUrl = "https://" . $apiUrl;
         }
-        
+
         return array(
             'success' => true,
             'redirectTo' => rtrim($apiUrl, '/'),
@@ -1232,20 +1321,20 @@ function gamecp_AdminSingleSignOn(array $params)
 {
     try {
         $apiUrl = $params['serverhostname'] ?: $params['serverip'];
-        
+
         // Ensure URL has protocol
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
             $apiUrl = "https://" . $apiUrl;
         }
-        
+
         // Admin SSO - redirect to GameCP settings
         $ssoUrl = rtrim($apiUrl, '/') . '/settings';
-        
+
         return array(
             'success' => true,
             'redirectTo' => $ssoUrl,
         );
-        
+
     } catch (Exception $e) {
         logModuleCall(
             'gamecp',
@@ -1255,18 +1344,18 @@ function gamecp_AdminSingleSignOn(array $params)
             $e->getTraceAsString(),
             array()
         );
-        
+
         // Return base URL on error
         $apiUrl = $params['serverhostname'] ?: $params['serverip'];
 
-        
+
         // Ensure URL has protocol
         if (!empty($apiUrl) && strpos($apiUrl, 'http') === false) {
             $apiUrl = "https://" . $apiUrl;
         }
-        
+
         $baseUrl = rtrim($apiUrl, '/');
-        
+
         return array(
             'success' => true,
             'redirectTo' => $baseUrl,
@@ -1290,13 +1379,13 @@ function gamecp_SaveCustomField($serviceId, $fieldName, $fieldValue)
             'serviceid' => $serviceId,
             'customfields' => base64_encode(serialize(array($fieldName => $fieldValue)))
         );
-        
+
         $results = localAPI($command, $postData);
-        
+
         if ($results['result'] == 'success') {
             return true;
         }
-        
+
         // Alternative: Direct database update if LocalAPI doesn't work
         // This requires access to WHMCS database
         // For now, we'll log and return false
@@ -1308,9 +1397,9 @@ function gamecp_SaveCustomField($serviceId, $fieldName, $fieldValue)
             $results,
             array()
         );
-        
+
         return false;
-        
+
     } catch (Exception $e) {
         logModuleCall(
             'gamecp',
@@ -1320,7 +1409,7 @@ function gamecp_SaveCustomField($serviceId, $fieldName, $fieldValue)
             $e->getTraceAsString(),
             array()
         );
-        
+
         return false;
     }
 }

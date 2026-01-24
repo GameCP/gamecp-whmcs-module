@@ -1,0 +1,28 @@
+{
+  "schema": "1.0",
+  "type": "whmcs-servers",
+  "name": "gamecp",
+  "license": "proprietary",
+  "category": "game",
+  "description": {
+    "name": "GameCP",
+    "tagline": "Next-Gen Game Server Control Panel",
+    "short": "The next-generation game server management platform. Built for performance, security, and ease of use.",
+    "long": "GameCP is the next-generation control panel designed for reliability, performance, and scale.\n\n* Automatic Server Provisioning\n* One-Click Game Installation\n* Real-Time Metrics & Monitoring\n* Single Sign-On Integration\n* Multi-Node Support\n* 50+ Supported Games\n* File Manager & RCON Console\n* Automatic Backups\n\n[Learn more &raquo;](https://gamecp.com)"
+  },
+  "logo": {
+    "filename": "logo.png"
+  },
+  "support": {
+    "homepage": "https://gamecp.com/",
+    "learn_more": "https://gamecp.com/features",
+    "support_url": "https://gamecp.com/support",
+    "docs_url": "https://gamecp.com/docs"
+  },
+  "authors": [
+    {
+      "name": "GameCP",
+      "homepage": "https://gamecp.com/"
+    }
+  ]
+}

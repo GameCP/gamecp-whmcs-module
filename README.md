@@ -27,6 +27,7 @@ This module integrates WHMCS with GameCP to automatically provision game servers
    - `gamecp.php`: Core module logic
    - `clientarea.tpl`: Client area management interface
    - `admin_hook.php`: Admin area hooks and customizations
+   - `logo.png`: Module icon for WHMCS interface
    - `README.md`: This documentation
 
 4. **Set Permissions**: Ensure the directory and files are readable by your web server (usually `www-data` or `apache`).
@@ -64,7 +65,71 @@ You can add custom fields to allow customers to customize their servers:
 
 - **Game Config ID**: Text field for game template selection
 - **Node ID**: Text field for manual node selection
-- **config_***: Any configuration overrides (prefixed with `config_`)
+- **GameCP Server Name**: Text field to let customers name their server
+
+## Environment Variable Mapping
+
+The module automatically maps WHMCS **Custom Fields** and **Configurable Options** to GameCP environment variables. This allows you to use friendly field names in WHMCS that automatically map to the correct environment variables in your game templates.
+
+### How It Works
+
+1. Create a Custom Field or Configurable Option in WHMCS with a friendly name (e.g., `Server Name`)
+2. GameCP automatically matches it to the template's environment variable (e.g., `SERVER_NAME`)
+3. The value is applied when the server is provisioned
+
+### Matching Rules
+
+The matching is **case-insensitive** and **space/underscore normalized**:
+
+| WHMCS Field Name | Matches Template Var |
+|------------------|---------------------|
+| `Server Name` | `SERVER_NAME` ✓ |
+| `Max Memory` | `MAX_MEMORY` ✓ |
+| `Max Players` | `MAX_PLAYERS` ✓ |
+| `RCON Password` | `RCON_PASSWORD` ✓ |
+| `server-name` | `SERVER_NAME` ✓ |
+
+### Template Variables vs Custom Variables
+
+- **Matched vars**: If the WHMCS field matches a variable in your game template, it **overrides the template default**
+- **Unmatched vars**: If no match is found, a **new custom environment variable** is created with:
+  - Display Name: Original WHMCS field name
+  - User Editable: `false` (billing-controlled)
+
+### Reserved Field Names
+
+These fields are used for provisioning and are NOT passed as environment variables:
+
+- `Game Config ID`
+- `GameCP Server ID`
+- `GameCP Server Name`
+- `Node ID`
+- `Location`
+
+### Example: Minecraft Server with Custom Memory
+
+1. Create a **Configurable Option Group** in WHMCS:
+   - Name: `Minecraft Options`
+   - Assign to your Minecraft product
+
+2. Add a **Configurable Option**:
+   - Name: `Max Memory`
+   - Type: Dropdown
+   - Options: `1024|1GB`, `2048|2GB`, `4096|4GB`
+
+3. When customer orders with `2GB` selected:
+   - WHMCS sends: `"Max Memory": "2048"`
+   - GameCP matches: `MAX_MEMORY` in template
+   - Server starts with 2GB memory limit
+
+## Server Naming
+
+The server name is determined in this order:
+
+1. **WHMCS Domain field** - If your product uses the domain field, that value is used
+2. **Auto-generated** - Falls back to `Game Server #123` (using the WHMCS service ID)
+
+Customers can rename their server in the GameCP panel after provisioning.
 
 ## GameCP API Setup
 
