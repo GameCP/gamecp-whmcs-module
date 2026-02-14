@@ -34,7 +34,7 @@ function gamecp_MetaData()
         'Description' => 'Automated game server provisioning and management. Instantly deploy, control, and monitor game servers for your customers with full SSO integration.',
         'Author' => 'GameCP',
         'AuthorURL' => 'https://gamecp.com',
-        'Version' => '1.1.0',
+        'Version' => '1.2.0',
         'Category' => 'Game Servers',
         'SupportURL' => 'https://gamecp.com/support',
         'DocumentationURL' => 'https://docs.gamecp.com/whmcs',
@@ -63,6 +63,10 @@ function gamecp_ConfigOptions()
             'Type' => 'text',
             'Size' => '50',
             'Description' => 'Target location for deployment (optional)'
+        ),
+        'Auto Deploy' => array(
+            'Type' => 'yesno',
+            'Description' => 'Automatically deploy/install the game server after creation. Disable for games that require the user to configure settings (e.g. Steam tokens) before deploying.'
         ),
     );
 }
@@ -446,6 +450,36 @@ function gamecp_CreateAccount(array $params)
             logModuleCall('gamecp', 'SaveServerId_Error', array(
                 'serviceid' => $params['serviceid']
             ), $e->getMessage(), array(), array());
+        }
+
+        // Step 5: Auto deploy if enabled (configoption4)
+        $autoDeploy = trim($params['configoption4'] ?? '');
+        if ($autoDeploy === 'on' || $autoDeploy === '1' || $autoDeploy === 'yes') {
+            logModuleCall('gamecp', 'AutoDeploy_Start', array(
+                'serverId' => $serverId
+            ), 'Auto deploy enabled, triggering deployment...', array(), array());
+
+            try {
+                $deployResponse = gamecp_ApiCall($apiUrl, $apiKey, "game-servers/{$serverId}/deploy", 'POST');
+
+                if ($deployResponse && (isset($deployResponse['success']) || isset($deployResponse['message']))) {
+                    logModuleCall('gamecp', 'AutoDeploy_Success', array(
+                        'serverId' => $serverId
+                    ), 'Auto deploy triggered successfully', array(), array());
+                } else {
+                    $deployError = isset($deployResponse['error']) ? $deployResponse['error'] : 'Unknown error';
+                    logModuleCall('gamecp', 'AutoDeploy_Failed', array(
+                        'serverId' => $serverId
+                    ), 'Auto deploy failed: ' . $deployError, array(), array());
+                    // Don't fail the entire creation - server was created successfully
+                    // Deploy can be triggered manually from the panel
+                }
+            } catch (Exception $e) {
+                logModuleCall('gamecp', 'AutoDeploy_Error', array(
+                    'serverId' => $serverId
+                ), $e->getMessage(), array(), array());
+                // Don't fail creation if deploy fails
+            }
         }
 
         return 'success';
