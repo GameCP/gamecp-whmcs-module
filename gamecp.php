@@ -746,6 +746,27 @@ function gamecp_ClientArea(array $params)
             }
         }
 
+        // Handle POST actions (start, stop, restart, reinstall)
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['gamecp_action']) && !empty($serverId)) {
+            $action = $_POST['gamecp_action'];
+
+            switch ($action) {
+                case 'start':
+                case 'stop':
+                case 'restart':
+                    $controlResponse = gamecp_ApiCall($apiUrl, $apiKey, "game-servers/{$serverId}/control", 'POST', array(
+                        'action' => $action
+                    ));
+                    if ($controlResponse && isset($controlResponse['success'])) {
+                        $message = ucfirst($action) . ' command sent successfully.';
+                    } else {
+                        $errorMsg = isset($controlResponse['error']) ? $controlResponse['error'] : 'Unknown error';
+                        $message = 'Failed to ' . $action . ' server: ' . $errorMsg;
+                    }
+                    break;
+            }
+        }
+
         if (empty($serverId)) {
             return array(
                 'templatefile' => 'clientarea',
