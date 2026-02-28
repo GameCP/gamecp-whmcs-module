@@ -35,7 +35,7 @@ function gamecp_MetaData()
         'Description' => 'Automated game server provisioning and management. Instantly deploy, control, and monitor game servers for your customers with full SSO integration.',
         'Author' => 'GameCP',
         'AuthorURL' => 'https://gamecp.com',
-        'Version' => '1.3.0',
+        'Version' => '1.4.0',
         'Category' => 'Game Servers',
         'SupportURL' => 'https://gamecp.com/support',
         'DocumentationURL' => 'https://docs.gamecp.com/whmcs',
@@ -395,8 +395,13 @@ function gamecp_CreateAccount(array $params)
 
         $serverId = gamecp_CreateGameServer($apiUrl, $apiKey, $serverData);
 
+        // Check if it returned an error string
+        if (is_string($serverId) && strpos($serverId, 'error:') === 0) {
+            return 'error: ' . substr($serverId, 6);
+        }
+
         if (!$serverId) {
-            return 'error: Failed to create game server';
+            return 'error: Failed to create game server (no server ID returned)';
         }
 
         // Step 4: Store server ID in WHMCS (assignedips = not visible to clients)
@@ -437,6 +442,9 @@ function gamecp_SuspendAccount(array $params)
             'action' => 'stop'
         ));
 
+        if (is_array($response) && !empty($response['_error'])) {
+            return 'error: ' . ($response['_message'] ?? 'Failed to suspend server');
+        }
         return ($response && isset($response['success'])) ? 'success' : 'error: Failed to suspend server';
 
     } catch (Exception $e) {
@@ -461,6 +469,9 @@ function gamecp_UnsuspendAccount(array $params)
             'action' => 'start'
         ));
 
+        if (is_array($response) && !empty($response['_error'])) {
+            return 'error: ' . ($response['_message'] ?? 'Failed to unsuspend server');
+        }
         return ($response && isset($response['success'])) ? 'success' : 'error: Failed to unsuspend server';
 
     } catch (Exception $e) {
@@ -483,6 +494,9 @@ function gamecp_TerminateAccount(array $params)
 
         $response = gamecp_ApiCall($creds['apiUrl'], $creds['apiKey'], "game-servers/{$serverId}", 'DELETE');
 
+        if (is_array($response) && !empty($response['_error'])) {
+            return 'error: ' . ($response['_message'] ?? 'Failed to terminate server');
+        }
         return ($response && isset($response['success'])) ? 'success' : 'error: Failed to terminate server';
 
     } catch (Exception $e) {
@@ -524,9 +538,13 @@ function gamecp_ClientArea(array $params)
                 $controlResponse = gamecp_ApiCall($apiUrl, $apiKey, "game-servers/{$serverId}/control", 'POST', array(
                     'action' => $action
                 ));
-                $message = ($controlResponse && isset($controlResponse['success']))
-                    ? ucfirst($action) . ' command sent successfully.'
-                    : 'Failed to ' . $action . ' server: ' . ($controlResponse['error'] ?? 'Unknown error');
+                if (is_array($controlResponse) && !empty($controlResponse['_error'])) {
+                    $message = 'Failed to ' . $action . ' server: ' . ($controlResponse['_message'] ?? 'Unknown error');
+                } elseif ($controlResponse && isset($controlResponse['success'])) {
+                    $message = ucfirst($action) . ' command sent successfully.';
+                } else {
+                    $message = 'Failed to ' . $action . ' server: Unknown error';
+                }
             }
         }
 
@@ -709,8 +727,19 @@ function gamecp_ApiCall($apiUrl, $apiKey, $endpoint, $method = 'GET', $data = nu
         return json_decode($response, true);
     }
 
+    // Parse the error response body so callers can access the error message
+    $decoded = json_decode($response, true);
     logModuleCall('gamecp', 'ApiCall', array('url' => $url, 'method' => $method, 'code' => $httpCode), $response, array(), array());
-    return false;
+
+    // Return a structured error array instead of false so callers get details
+    return array(
+        '_error' => true,
+        '_httpCode' => $httpCode,
+        '_message' => isset($decoded['error']) ? $decoded['error'] : 'API request failed (HTTP ' . $httpCode . ')',
+        '_code' => isset($decoded['code']) ? $decoded['code'] : 'UNKNOWN',
+        '_details' => isset($decoded['details']) ? $decoded['details'] : null,
+        '_raw' => $decoded ?: $response,
+    );
 }
 
 /**
@@ -757,10 +786,19 @@ function gamecp_CreateGameServer($apiUrl, $apiKey, $serverData)
 {
     $response = gamecp_ApiCall($apiUrl, $apiKey, 'game-servers', 'POST', $serverData);
 
-    if ($response && isset($response['gameServer']['serverId'])) {
+    // Check for API error response
+    if (!$response || (is_array($response) && !empty($response['_error']))) {
+        $errorMsg = is_array($response) && isset($response['_message'])
+            ? $response['_message']
+            : 'Unknown error';
+        // Return error string prefixed with 'error:' so caller can detect it
+        return 'error:' . $errorMsg;
+    }
+
+    if (isset($response['gameServer']['serverId'])) {
         return $response['gameServer']['serverId'];
     }
-    if ($response && isset($response['serverId'])) {
+    if (isset($response['serverId'])) {
         return $response['serverId'];
     }
 
