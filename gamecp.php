@@ -35,7 +35,7 @@ function gamecp_MetaData()
         'Description' => 'Automated game server provisioning and management. Instantly deploy, control, and monitor game servers for your customers with full SSO integration.',
         'Author' => 'GameCP',
         'AuthorURL' => 'https://gamecp.com',
-        'Version' => '1.4.0',
+        'Version' => '1.4.1',
         'Category' => 'Game Servers',
         'SupportURL' => 'https://gamecp.com/support',
         'DocumentationURL' => 'https://docs.gamecp.com/whmcs',
@@ -576,6 +576,10 @@ function gamecp_ClientArea(array $params)
         // Resolve connection address (IP:Port) from live API data
         $connectionAddress = gamecp_ResolveConnectionAddress($server);
 
+        // Harden metrics/gameStatus to always be arrays (PHP 8.x TypeError prevention)
+        $metrics = isset($server['metrics']) && is_array($server['metrics']) ? $server['metrics'] : array();
+        $gameStatus = isset($server['gameStatus']) && is_array($server['gameStatus']) ? $server['gameStatus'] : null;
+
         // Sync the real IP:Port to WHMCS dedicatedip field
         if (!empty($connectionAddress)) {
             try {
@@ -593,8 +597,8 @@ function gamecp_ClientArea(array $params)
                 'serverName' => $server['name'] ?? 'Game Server',
                 'serverId' => $serverId,
                 'status' => $server['status'] ?? 'unknown',
-                'metrics' => $server['metrics'] ?? array(),
-                'gameStatus' => $server['gameStatus'] ?? null,
+                'metrics' => $metrics,
+                'gameStatus' => $gameStatus,
                 'connectionAddress' => $connectionAddress,
                 'serviceid' => $serviceId,
                 'message' => $message

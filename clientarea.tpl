@@ -45,33 +45,34 @@ Variables:
     </div>
     {/if}
 
-    {* Stats Grid *}
+    {* Stats Grid - guarded for PHP 8.x type safety *}
+    {if is_array($metrics) || (isset($gameStatus) && is_array($gameStatus))}
     <div class="gamecp-stats">
-        {if $metrics.playerCount !== null || $gameStatus}
+        {if is_array($metrics) && $metrics.playerCount !== null || (isset($gameStatus) && is_array($gameStatus))}
         <div class="gamecp-stat">
             <div class="gamecp-stat-label">Players</div>
             <div class="gamecp-stat-value">{$metrics.playerCount|default:$gameStatus.numplayers|default:0}<span class="gamecp-stat-dim"> / {$metrics.maxPlayers|default:$gameStatus.maxplayers|default:0}</span></div>
         </div>
         {/if}
-        {if $metrics.cpuUsage}
+        {if is_array($metrics) && $metrics.cpuUsage}
         <div class="gamecp-stat">
             <div class="gamecp-stat-label">CPU</div>
             <div class="gamecp-stat-value">{$metrics.cpuUsage|number_format:1}<span class="gamecp-stat-dim">%</span></div>
         </div>
         {/if}
-        {if $metrics.memoryUsage}
+        {if is_array($metrics) && $metrics.memoryUsage}
         <div class="gamecp-stat">
             <div class="gamecp-stat-label">Memory</div>
             <div class="gamecp-stat-value">{$metrics.memoryUsage|number_format:0}<span class="gamecp-stat-dim"> MB</span></div>
         </div>
         {/if}
-        {if $metrics.diskUsage && $metrics.diskUsage > 0}
+        {if is_array($metrics) && $metrics.diskUsage && $metrics.diskUsage > 0}
         <div class="gamecp-stat">
             <div class="gamecp-stat-label">Disk</div>
             <div class="gamecp-stat-value">{if $metrics.diskUsage > 1024}{($metrics.diskUsage / 1024)|number_format:1}<span class="gamecp-stat-dim"> GB</span>{else}{$metrics.diskUsage|number_format:0}<span class="gamecp-stat-dim"> MB</span>{/if}</div>
         </div>
         {/if}
-        {if $metrics.uptime && $metrics.uptime > 0}
+        {if is_array($metrics) && $metrics.uptime && $metrics.uptime > 0}
         <div class="gamecp-stat">
             <div class="gamecp-stat-label">Uptime</div>
             <div class="gamecp-stat-value">
@@ -85,13 +86,14 @@ Variables:
             </div>
         </div>
         {/if}
-        {if $gameStatus.map}
+        {if isset($gameStatus) && is_array($gameStatus) && $gameStatus.map}
         <div class="gamecp-stat">
             <div class="gamecp-stat-label">Map</div>
             <div class="gamecp-stat-value gamecp-stat-text">{$gameStatus.map}</div>
         </div>
         {/if}
     </div>
+    {/if}
 
     {* Controls *}
     <div class="gamecp-controls">
